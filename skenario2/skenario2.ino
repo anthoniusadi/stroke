@@ -82,6 +82,20 @@ void loop() {
   currentIndex = (currentIndex + 1) % arraySize;
   // int progress_bar = map(grove_kalibrasi, 0, 1024, 0, 100);
   int progress_bar = map(grove_kalibrasi,0,450,0,100);
+  if(progress_bar>1.2*initial_value){
+    bool status_1= true;
+    //send light
+  }
+    if(progress_bar>1.3*initial_value){
+    bool status_2= true;
+    //send light
+
+  }
+    if(progress_bar>1.5*initial_value){
+    bool status_3= true;
+    //send light
+
+  }
   Serial.print("j0.val=");
   Serial.print(progress_bar);
   Serial.write(0xff);
