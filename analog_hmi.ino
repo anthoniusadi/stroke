@@ -1,5 +1,5 @@
-int sensor_grove = 26;
-int sensor_myo = 34;
+int sensor_grove = 32;
+int sensor_myo = 26;
 int value=0;
 int kalibrator = 0;
 const int arraySize = 50;  // Ukuran array

@@ -1,14 +1,16 @@
-// //mqtt
+const int sampleSize = 12;  // Ukuran buffer untuk moving average
+float signalBuffer[sampleSize];
+int bufferIndex = 0;
 #include <WiFi.h>
 #include <PubSubClient.h>
 const char *ssid = "mqttarduino";
 const char *password = "arduinomqtt";
-
+int gain = 2;
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
 const char *topic = "latihan1/capaian";
 const char *topic2 = "nama";
-
+int set_th = 0;
 
 
 const char *mqtt_username = "qwerty";
@@ -33,9 +35,12 @@ bool status_2 = false;
 bool status_3 = false;
 bool ready = false;
 int progress_bar = 0;
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
+  analogReadResolution(12);
+
   WiFi.mode(WIFI_STA);
   pinMode(sensor_grove, INPUT);
   pinMode(sensor_myo, INPUT);
@@ -82,72 +87,25 @@ void callback(char *topic, byte *payload, unsigned int length) {
   Serial.println();
   Serial.println("-----------------------");
 }
-
-// void setup_wifi() {
-//   delay(10);
-//   // Serial.println();
-//   // Serial.print("Connecting to ");
-//   // Serial.println(ssid);
-
-//   WiFi.begin(ssid, password);
-
-//   while (WiFi.status() != WL_CONNECTED) {
-//     delay(500);
-//     // Serial.print(".");
-//   }
-
-//   // Serial.println("");
-//   // Serial.println("WiFi connected");
-//   // Serial.println("IP address: ");
-//   // Serial.println(WiFi.localIP());
-// }
-
-// void callback(char *topic, byte *payload, unsigned int length) {
-//   // Serial.print("Message arrived in topic: ");
-//   Serial.println(topic);
-//   // Serial.print("Message:");
-//   for (int i = 0; i < length; i++) {
-//     Serial.print((char)payload[i]);
-//   }
-//   Serial.println();
-//   // Serial.println("-----------------------");
-// }
-// void reconnect() {
-//   // Loop until we're reconnected
-//   while (!client.connected()) {
-//     // Serial.print("Attempting MQTT connection...");
-//     // Attempt to connect
-//     if (client.connect("esp32")) {
-//       // Serial.println("connected");
-//       // Subscribe
-//       client.subscribe("latihan1/capaian");
-//     } else {
-//       // Serial.print("failed, rc=");
-//       // Serial.print(client.state());
-//       // Serial.println(" try again in 5 seconds");
-//       // Wait 5 seconds before retrying
-//       delay(5000);
-//     }
-// }
-// }
-//char data_from_display;
 char msg_out[20];
+int grovesensorVal;
 void loop() {
-  // if (!client.connected()) {
-  //   reconnect();
-  // }
-
   delay(1);
-  int grove = analogRead(sensor_grove);
-  int myo = analogRead(sensor_myo);
-  int myosensorVal = map(myo, 0, 4096, 0, 2048);
-  int grovesensorVal = map(grove, 0, 4096, 0, 2048);
+  int rawSignal = analogRead(sensor_grove);
+  float rectifiedSignal = abs(rawSignal - 512);
+
+  // Smoothing (Moving Average)
+  signalBuffer[bufferIndex] = rectifiedSignal;
+  bufferIndex = (bufferIndex + 1) % sampleSize;
+
+  float smoothedSignal = 0;
+  for (int i = 0; i < sampleSize; i++) {
+    smoothedSignal += signalBuffer[i];
+  }
+  smoothedSignal /= sampleSize;
+  grovesensorVal = smoothedSignal;
   dataArray[currentIndex] = grovesensorVal;
   int grove_kalibrasi = grovesensorVal - kalibrator;
-
-  Serial.print(grove_kalibrasi);
-
-
   while (Serial.available()) {
 
 
@@ -158,13 +116,13 @@ void loop() {
       }
       kalibrator = tare(dataArray, arraySize) - offset;
       initial_value = kalibrator;
-
+      set_th = (grovesensorVal - kalibrator) * gain;
       delay(3000);
       ready = true;
     }
   }
-
-  signal_wave = map(grove_kalibrasi, 0, 2048, 0, 800);
+  // signal_wave = map(grove_kalibrasi, 0, 2048, 0, 800);
+  signal_wave = grove_kalibrasi;
   String Tosend = "add ";
   Tosend += 1;
   Tosend += ",";
@@ -198,7 +156,7 @@ void loop() {
 
   currentIndex = (currentIndex + 1) % arraySize;
   // int progress_bar = map(grove_kalibrasi, 0, 1024, 0, 100);
-  progress_bar = map(grove_kalibrasi, 0, 450, 0, 100);
+  progress_bar = (map(grove_kalibrasi, 0, 800, 0, 100) * gain);
   Serial.print("j0.val=");
   Serial.print(progress_bar);
   Serial.write(0xff);
@@ -210,7 +168,7 @@ void loop() {
   Serial.write(0xff);
   Serial.write(0xff);
 
-  if (progress_bar > 55 && ready==true) {
+  if (grove_kalibrasi > (set_th + 0.05) && ready == true) {
 
     if (status_1 == false) {
       client.publish(topic, "1");
@@ -232,7 +190,7 @@ void loop() {
     Serial.write(0xff);
     Serial.write(0xff);
   }
-  if (progress_bar > 60 && ready==true) {
+  if (grove_kalibrasi > (set_th + 0.1) && ready == true) {
     if (status_2 == false) {
       client.publish(topic, "2");
       // status_2 = true;
@@ -248,7 +206,7 @@ void loop() {
     Serial.print("t6.txt=tercapai");
     sendTo();
   }
-  if (progress_bar > 65 && ready==true) {
+  if (grove_kalibrasi > (set_th + 0.15) && ready == true) {
     if (status_3 == false) {
       client.publish(topic, "3");
       // status_3 = true;
@@ -267,7 +225,9 @@ void loop() {
     //send light
   }
   client.loop();
+  delay(10);
 }
+
 
 int tare(int data[], int size) {
   int value = 0;
@@ -285,5 +245,3 @@ void sendTo() {
   Serial.write(0xff);
   Serial.write(0xff);
 }
-// String command = "n0.val=" + String(grove_kalibrasi) + "\xff\xff\xff";
-// Serial.print(command);
